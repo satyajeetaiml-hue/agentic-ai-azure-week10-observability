@@ -1,45 +1,50 @@
-"""Week 10 — Observability, Evaluation & Governance — starter FastAPI service.
+"""Week 10 — Observability, Evaluation & Governance.
 
-Use case: Regulated Advice Quality Monitoring (Financial Services).
-See README.md for the full lab brief. Run:  uvicorn app.main:app --reload
+Advice Quality Monitoring: every answer is traced, evaluated, and flagged when it
+drops below quality thresholds; aggregate metrics feed a dashboard. Run:  uvicorn app.main:app --reload
 """
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
 
-app = FastAPI(title="Week 10 — Observability, Evaluation & Governance", version="0.1.0")
+from app.service import (
+    AdviseRequest,
+    AdviseResponse,
+    get_backend,
+    get_settings,
+    metrics_summary,
+    recent_traces,
+)
+
+settings = get_settings()
+app = FastAPI(title="Week 10 — Observability (Advice Quality)", version="0.2.0")
 
 
-class LabRequest(BaseModel):
-    client_question: str = Field(..., min_length=1, description="A client question routed through the advice agent.")
+@app.get("/health", tags=["health"])
+def health() -> dict[str, str]:
+    return {"status": "ok", "week": "10", "tracing": "on" if settings.tracing_enabled else "off"}
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "week": "10", "use_case": "Regulated Advice Quality Monitoring"}
-
-
-@app.get("/")
-def root():
+@app.get("/", tags=["root"])
+def root() -> dict[str, str]:
     return {
         "service": "agentic-ai-azure-week10-observability",
-        "week": "10",
         "endpoint": "/api/v1/advise",
         "docs": "/docs",
     }
 
 
-@app.post("/api/v1/advise")
-def handler(payload: LabRequest):
-    """Mock handler for the Regulated Advice Quality Monitoring.
+@app.post("/api/v1/advise", response_model=AdviseResponse, tags=["week10"])
+def advise(payload: AdviseRequest) -> AdviseResponse:
+    return get_backend().advise(payload)
 
-    TODO (lab): replace this stub with the real implementation described in
-    README.md (the Azure services for this week are listed in the Tech Stack).
-    """
-    return {
-        "week": "10",
-        "use_case": "Regulated Advice Quality Monitoring",
-        "received": payload.client_question,
-        "status": "accepted",
-        "note": "Mock response — implement the real agent per README.md.",
-    }
+
+@app.get("/api/v1/metrics", tags=["week10"])
+def metrics() -> dict:
+    """Aggregate quality metrics for the dashboard / alerting."""
+    return metrics_summary()
+
+
+@app.get("/api/v1/traces", tags=["week10"])
+def traces() -> dict:
+    """Recent per-request traces (groundedness/relevance/safety/coherence)."""
+    return {"traces": recent_traces()}
